@@ -1,0 +1,432 @@
+# =============================================================================
+# Pepto Pet Services Marketplace — GitHub Actions CI/CD Pipeline
+# =============================================================================
+# Triggers:
+#   • Push to `main` or `develop`
+#   • Pull Request targeting `main`
+#
+# Jobs:
+#   1. lint-and-test   → always (all branches)
+#   2. build-and-push  → only on push to `main`
+#   3. deploy          → only on push to `main` (after successful build)
+# =============================================================================
+
+name: Pepto CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/pepto
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 1: Lint & Test
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  lint-and-test:
+    name: "🔍 Lint & Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Service containers for the test suite
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: pepto_test
+          POSTGRES_PASSWORD: pepto_test
+          POSTGRES_DB: pepto_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pepto_test -d pepto_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history for coverage diff
+
+      # ── Python setup ────────────────────────────────────────────────────────
+      - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      # ── Install dependencies ────────────────────────────────────────────────
+      - name: 📦 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      # ── Lint: flake8 ────────────────────────────────────────────────────────
+      - name: 🔎 Lint with flake8
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warn on style issues (not fatal)
+          flake8 . --count --exit-zero \
+            --max-line-length=120 \
+            --extend-ignore=E203,W503 \
+            --exclude=migrations,__pycache__,.venv \
+            --statistics
+
+      # ── Format check: black ─────────────────────────────────────────────────
+      - name: 🎨 Check formatting with black
+        run: |
+          black --check --diff \
+            --line-length=120 \
+            --exclude='/(\.venv|migrations|__pycache__)/' \
+            .
+
+      # ── Type check: mypy (optional but recommended) ─────────────────────────
+      - name: 🔬 Type check with mypy
+        run: |
+          mypy app/ --ignore-missing-imports --no-strict-optional || true
+        continue-on-error: true
+
+      # ── Security scan: bandit ───────────────────────────────────────────────
+      - name: 🔒 Security scan with bandit
+        run: |
+          bandit -r app/ -ll -ii --exclude app/tests || true
+        continue-on-error: true
+
+      # ── Run test suite ──────────────────────────────────────────────────────
+      - name: 🧪 Run pytest with coverage
+        env:
+          FLASK_ENV: testing
+          TESTING: "true"
+          DATABASE_URL: postgresql://pepto_test:pepto_test@localhost:5432/pepto_test_db
+          REDIS_URL: redis://localhost:6379/1
+          SECRET_KEY: ci-test-secret-key-not-used-in-prod
+          JWT_SECRET_KEY: ci-jwt-secret
+          STRIPE_SECRET_KEY: sk_test_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_placeholder
+          CLOUDINARY_URL: cloudinary://placeholder:placeholder@placeholder
+          MAIL_SERVER: localhost
+          MAIL_PORT: "1025"
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --cov-fail-under=70 \
+            -p no:warnings \
+            --durations=10
+
+      # ── Upload coverage to Codecov ──────────────────────────────────────────
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: backend/coverage.xml
+          flags: backend
+          name: pepto-backend
+          fail_ci_if_error: false
+
+      # ── Frontend lint (quick check) ─────────────────────────────────────────
+      - name: ⚛️ Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+        # Run from repo root for frontend
+      - name: 📦 Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --frozen-lockfile
+
+      - name: 🔎 Lint frontend (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: 🎨 Check frontend formatting (Prettier)
+        working-directory: frontend
+        run: npm run format:check || true
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Build & Push Docker Images
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: "🐳 Build & Push Images"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lint-and-test
+    # Only run on push to main (not PRs, not develop)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # For OIDC / cosign signing
+
+    outputs:
+      backend-image: ${{ steps.meta-backend.outputs.tags }}
+      frontend-image: ${{ steps.meta-frontend.outputs.tags }}
+      image-sha: ${{ steps.short-sha.outputs.sha }}
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔑 Compute short SHA
+        id: short-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # ── Set up QEMU + Buildx for multi-platform builds ───────────────────────
+      - name: 🔧 Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      # ── Login to GitHub Container Registry ───────────────────────────────────
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Docker metadata for backend ──────────────────────────────────────────
+      - name: 🏷️ Backend image metadata
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=true
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=Pepto Backend
+            org.opencontainers.image.description=Pepto Pet Services Marketplace Flask API
+            org.opencontainers.image.vendor=Pepto App
+
+      # ── Docker metadata for frontend ─────────────────────────────────────────
+      - name: 🏷️ Frontend image metadata
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=true
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=Pepto Frontend
+            org.opencontainers.image.description=Pepto Pet Services Marketplace React SPA
+            org.opencontainers.image.vendor=Pepto App
+
+      # ── Build & push backend image ───────────────────────────────────────────
+      - name: 🏗️ Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          dockerfile: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          platforms: linux/amd64,linux/arm64
+          provenance: true
+          sbom: true
+
+      # ── Build & push frontend image ──────────────────────────────────────────
+      - name: 🏗️ Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          dockerfile: ./frontend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+            VITE_SOCKET_URL=${{ secrets.VITE_SOCKET_URL }}
+            VITE_MAPBOX_TOKEN=${{ secrets.VITE_MAPBOX_TOKEN }}
+            VITE_CLOUDINARY_CLOUD_NAME=${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}
+          provenance: true
+          sbom: true
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: Deploy to Production Server
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: "🚀 Deploy to Production"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    environment:
+      name: production
+      url: https://pepto.app
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Set up SSH agent for server access ───────────────────────────────────
+      - name: 🔑 Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: 🔐 Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      # ── Copy docker-compose files to server ──────────────────────────────────
+      - name: 📤 Sync deployment files
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            docker-compose.yml \
+            nginx/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/
+
+      # ── Pull latest images & restart services ────────────────────────────────
+      - name: 🐳 Pull latest Docker images
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Login to GHCR on the remote server
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the latest images
+            docker compose pull
+
+            echo "✅ Images pulled successfully"
+          ENDSSH
+
+      # ── Rolling restart with zero downtime ───────────────────────────────────
+      - name: ♻️ Restart services (rolling update)
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Bring up services with updated images
+            docker compose up -d --remove-orphans
+
+            echo "⏳ Waiting for backend to be healthy..."
+            timeout 120 bash -c \
+              'until docker compose exec -T backend curl -fs http://localhost:5000/api/health; do sleep 5; done'
+
+            echo "✅ Services restarted successfully"
+          ENDSSH
+
+      # ── Run database migrations ──────────────────────────────────────────────
+      - name: 🗄️ Run database migrations
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "🔄 Running Flask-Migrate migrations..."
+            docker compose exec -T backend flask db upgrade
+
+            echo "✅ Migrations completed successfully"
+          ENDSSH
+
+      # ── Production health check ──────────────────────────────────────────────
+      - name: 🏥 Production health check
+        run: |
+          echo "⏳ Waiting 10s for services to stabilise..."
+          sleep 10
+
+          # Check the public HTTPS endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            https://pepto.app/api/health)
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Health check passed — HTTP $HTTP_STATUS"
+          else
+            echo "❌ Health check FAILED — HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+      # ── Notify Slack on success ──────────────────────────────────────────────
+      - name: 📣 Notify deployment success
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ *Pepto deployed to production* — <https://pepto.app|pepto.app>\nCommit: `${{ github.sha }}` by ${{ github.actor }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+      # ── Notify Slack on failure ──────────────────────────────────────────────
+      - name: 📣 Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "❌ *Pepto deployment FAILED* — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>\nCommit: `${{ github.sha }}` by ${{ github.actor }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

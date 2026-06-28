@@ -1,0 +1,226 @@
+# =============================================================================
+# Pepto — .gitignore
+# Covers: Python, Node.js/React, Docker, IDE, OS artefacts, secrets
+# =============================================================================
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+Pipfile.lock
+
+# pytest & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+nosetests.xml
+
+# mypy, pytype, pyre
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Flask instance folder
+instance/
+
+# Celery beat schedule file
+celerybeat-schedule
+celerybeat.pid
+
+# pyinstaller
+*.manifest
+*.spec
+
+# Translations
+*.mo
+*.pot
+
+# Profiling
+*.prof
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node.js / React / Vite
+# ──────────────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Local env files (keep .env.example)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite
+*.local
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Storybook
+storybook-static/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Docker
+# ──────────────────────────────────────────────────────────────────────────────
+.dockerignore
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Secrets & Credentials  ← Never commit these!
+# ──────────────────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example        # Allow example files
+!frontend/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+service-account*.json
+*-credentials.json
+secrets/
+.secrets/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# IDEs & Editors
+# ──────────────────────────────────────────────────────────────────────────────
+
+# JetBrains (PyCharm, WebStorm, DataGrip …)
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# VS Code — keep extensions recommendations, ignore the rest
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Vim / Emacs
+*.swp
+*.swo
+*.swn
+*~
+\#*\#
+.\#*
+.emacs.desktop
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Operating System
+# ──────────────────────────────────────────────────────────────────────────────
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Logs
+# ──────────────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Databases & Uploads (local dev)
+# ──────────────────────────────────────────────────────────────────────────────
+*.sqlite3
+*.db
+*.sql.gz
+media/
+uploads/
+staticfiles/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Terraform / Infrastructure (if used later)
+# ──────────────────────────────────────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Misc
+# ──────────────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+*.DS_Store
+.cache/

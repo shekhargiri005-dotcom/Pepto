@@ -1,0 +1,431 @@
+/* ===== CSS Variables ===== */
+:root {
+  --color-primary: #6C63FF;
+  --color-primary-light: #8B85FF;
+  --color-primary-dark: #4D42FF;
+  --color-secondary: #FF6584;
+  --color-secondary-light: #FF879F;
+  --color-accent: #43D9AD;
+  --color-accent-light: #6FEFC7;
+  --color-dark-bg: #0F0F1A;
+  --color-dark-card: #1A1A2E;
+  --color-dark-border: #2D2D4E;
+  --color-dark-hover: #252542;
+  --color-text-primary: #E2E8F0;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+/* ===== Base Styles ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-dark-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ===== Custom Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0F0F1A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2D2D4E;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6C63FF;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2D2D4E #0F0F1A;
+}
+
+/* ===== Glassmorphism ===== */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-dark {
+  background: rgba(26, 26, 46, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-primary {
+  background: rgba(108, 99, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(108, 99, 255, 0.2);
+}
+
+/* ===== Gradient Button ===== */
+.gradient-btn {
+  background: linear-gradient(135deg, #6C63FF 0%, #FF6584 100%);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #FF6584 0%, #6C63FF 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gradient-btn:hover::before {
+  opacity: 1;
+}
+
+.gradient-btn span {
+  position: relative;
+  z-index: 1;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #6C63FF, #FF6584, #43D9AD);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% auto;
+  animation: gradientShift 4s linear infinite;
+}
+
+/* ===== Leaflet Dark Theme Overrides ===== */
+.leaflet-container {
+  background: #0F0F1A;
+  font-family: var(--font-sans);
+}
+
+.leaflet-tile-pane {
+  filter: invert(90%) hue-rotate(180deg) brightness(0.8) contrast(0.9);
+}
+
+.leaflet-control-zoom {
+  border: 1px solid #2D2D4E !important;
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  background: #1A1A2E !important;
+  color: #E2E8F0 !important;
+  border-bottom-color: #2D2D4E !important;
+}
+
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover {
+  background: #252542 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #1A1A2E;
+  border: 1px solid #2D2D4E;
+  border-radius: var(--radius-md);
+  color: #E2E8F0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.leaflet-popup-tip {
+  background: #1A1A2E;
+}
+
+/* ===== Animation Keyframes ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-15px) rotate(5deg);
+  }
+  66% {
+    transform: translateY(-8px) rotate(-3deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(108, 99, 255, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 40px rgba(108, 99, 255, 0.8);
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes skeletonLoading {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* ===== Loading Skeleton ===== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #1A1A2E 25%,
+    #252542 50%,
+    #1A1A2E 75%
+  );
+  background-size: 200% 100%;
+  animation: skeletonLoading 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Utility Classes ===== */
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out both;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== Input Styles ===== */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+textarea,
+select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #E2E8F0;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748B;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #6C63FF;
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+}
+
+/* ===== Range Input ===== */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+input[type="range"]::-webkit-slider-track {
+  background: #2D2D4E;
+  height: 4px;
+  border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #6C63FF;
+  margin-top: -7px;
+  box-shadow: 0 0 10px rgba(108, 99, 255, 0.4);
+  cursor: grab;
+  transition: transform 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.2);
+}
+
+/* ===== Stripe Element Styles ===== */
+.StripeElement {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  color: #E2E8F0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.StripeElement--focus {
+  border-color: #6C63FF;
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+}
+
+/* ===== React Calendar Overrides ===== */
+.react-calendar {
+  background: transparent !important;
+  border: none !important;
+  font-family: var(--font-sans) !important;
+  width: 100% !important;
+  color: #E2E8F0 !important;
+}
+
+.react-calendar__navigation button {
+  color: #E2E8F0 !important;
+  min-width: 44px !important;
+  background: none !important;
+  font-size: 1rem !important;
+  padding: 0.5rem !important;
+  border-radius: var(--radius-sm) !important;
+  transition: background 0.2s ease !important;
+}
+
+.react-calendar__navigation button:hover,
+.react-calendar__navigation button:focus {
+  background: rgba(108, 99, 255, 0.2) !important;
+}
+
+.react-calendar__month-view__weekdays {
+  color: #94A3B8 !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none !important;
+}
+
+.react-calendar__tile {
+  color: #E2E8F0 !important;
+  background: none !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0.625rem !important;
+  font-size: 0.875rem !important;
+  transition: background 0.2s ease !important;
+}
+
+.react-calendar__tile:hover {
+  background: rgba(108, 99, 255, 0.2) !important;
+}
+
+.react-calendar__tile--active {
+  background: #6C63FF !important;
+  color: white !important;
+}
+
+.react-calendar__tile--now {
+  background: rgba(67, 217, 173, 0.15) !important;
+  color: #43D9AD !important;
+  font-weight: 600 !important;
+}
+
+.react-calendar__tile--active.react-calendar__tile--now {
+  background: #6C63FF !important;
+  color: white !important;
+}
+
+.react-calendar__tile:disabled {
+  color: #64748B !important;
+  cursor: not-allowed;
+}
