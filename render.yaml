@@ -1,11 +1,11 @@
 services:
-  # 1. Flask Backend API
+  # 1. Flask Backend API (Docker)
   - type: web
     name: pepto-backend
-    env: python
+    env: docker
     region: oregon
-    buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "cd backend && gunicorn -c gunicorn.conf.py wsgi:app"
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     envVars:
       - key: FLASK_ENV
         value: production
@@ -28,15 +28,15 @@ services:
           type: redis
           name: pepto-redis
           property: connectionString
-      # Note: You will need to add JWT_SECRET_KEY, STRIPE keys, SENDGRID, CLOUDINARY manually in the Render dashboard!
 
-  # 2. Celery Background Worker
+  # 2. Celery Background Worker (Docker)
   - type: worker
     name: pepto-celery-worker
-    env: python
+    env: docker
     region: oregon
-    buildCommand: "cd backend && pip install -r requirements.txt"
-    startCommand: "cd backend && celery -A celery_app worker --loglevel=info"
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: "celery -A celery_app worker --loglevel=info"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -76,11 +76,11 @@ services:
         source: /*
         destination: /index.html
 
-  # 4. Redis Cache & Message Broker
+  # 4. Redis Cache & Message Broker (Paid Tier Required)
   - type: redis
     name: pepto-redis
     region: oregon
-    plan: starter # Redis is not available on the free tier
+    plan: starter
 
 databases:
   # 5. PostgreSQL Database
