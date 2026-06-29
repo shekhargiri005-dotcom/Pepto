@@ -66,7 +66,7 @@ class Payment(BaseMixin, db.Model):
         refund_id: Stripe Refund object ID (re_...).
         refund_amount: Amount actually refunded.
         refunded_at: Timestamp of the refund.
-        metadata: Arbitrary JSON blob for extra Stripe metadata.
+        stripe_metadata: Arbitrary JSON blob for extra Stripe metadata.
     """
 
     __tablename__ = "payments"
@@ -130,7 +130,7 @@ class Payment(BaseMixin, db.Model):
 
     # ── Extra data ────────────────────────────────────────────────────────────
 
-    metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    stripe_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # ── Relationships ─────────────────────────────────────────────────────────
 
