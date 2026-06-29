@@ -169,7 +169,7 @@ def create_app(config_name: str = "development") -> Flask:
 
     # ── 4. Import / register models (for Alembic) ─────────────────────────────
     with app.app_context():
-        import app.models  # noqa: F401  — side-effect import registers all models
+        import app.models as _models  # noqa: F401  — side-effect import registers all models
 
     # ── 5. Register blueprints ────────────────────────────────────────────────
     _register_blueprints(app)
