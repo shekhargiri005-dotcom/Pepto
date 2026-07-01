@@ -77,7 +77,7 @@ class AuthService:
             )
         if not first_name or not last_name:
             raise ValidationError("First name and last name are required.")
-        if role not in ("customer", "provider", "admin"):
+        if role not in ("customer", "store_owner", "delivery_partner", "admin"):
             raise ValidationError("Invalid role specified.")
 
         # ── Uniqueness check ──────────────────────────────────────────────
@@ -461,11 +461,137 @@ class AuthService:
         return {
             "id": user.id,
             "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
+            "full_name": getattr(user, "full_name", None),
             "phone": user.phone,
-            "role": user.role,
-            "is_email_verified": user.is_email_verified,
+            "role": user.role if isinstance(user.role, str) else user.role.value,
+            "is_verified": getattr(user, "is_verified", False),
+            "is_phone_verified": getattr(user, "is_phone_verified", False),
+            "two_fa_enabled": getattr(user, "two_fa_enabled", False),
+            "avatar_url": getattr(user, "avatar_url", None),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "last_login": user.last_login.isoformat() if user.last_login else None,
+        }
+
+    # ── Twilio 2FA helpers ────────────────────────────────────────────────────
+
+    def send_otp(self, phone: str) -> bool:
+        """Send an OTP to the given phone number via Twilio Verify.
+
+        Args:
+            phone: E.164 format phone number e.g. '+919876543210'
+
+        Returns:
+            True if OTP sent successfully.
+        """
+        from flask import current_app
+        from twilio.rest import Client as TwilioClient
+
+        account_sid = current_app.config.get("TWILIO_ACCOUNT_SID", "")
+        auth_token = current_app.config.get("TWILIO_AUTH_TOKEN", "")
+        service_sid = current_app.config.get("TWILIO_VERIFY_SERVICE_SID", "")
+
+        if not all([account_sid, auth_token, service_sid]):
+            logger.warning("Twilio not configured — OTP not sent")
+            return False
+
+        try:
+            client = TwilioClient(account_sid, auth_token)
+            verification = client.verify.v2.services(service_sid).verifications.create(
+                to=phone, channel="sms"
+            )
+            logger.info("OTP sent to %s (status=%s)", phone, verification.status)
+            return verification.status == "pending"
+        except Exception as exc:
+            logger.exception("Twilio send_otp error: %s", exc)
+            return False
+
+    def verify_otp(self, phone: str, code: str) -> bool:
+        """Verify an OTP code for the given phone number.
+
+        Args:
+            phone: E.164 phone number.
+            code: 6-digit OTP entered by user.
+
+        Returns:
+            True if OTP is correct and not expired.
+        """
+        from flask import current_app
+        from twilio.rest import Client as TwilioClient
+
+        account_sid = current_app.config.get("TWILIO_ACCOUNT_SID", "")
+        auth_token = current_app.config.get("TWILIO_AUTH_TOKEN", "")
+        service_sid = current_app.config.get("TWILIO_VERIFY_SERVICE_SID", "")
+
+        if not all([account_sid, auth_token, service_sid]):
+            logger.warning("Twilio not configured — OTP verification skipped")
+            return False
+
+        try:
+            client = TwilioClient(account_sid, auth_token)
+            check = client.verify.v2.services(service_sid).verification_checks.create(
+                to=phone, code=code
+            )
+            logger.info("OTP verification for %s: %s", phone, check.status)
+            return check.status == "approved"
+        except Exception as exc:
+            logger.exception("Twilio verify_otp error: %s", exc)
+            return False
+
+    def verify_phone(self, user_id: str, phone: str, code: str) -> dict:
+        """Verify a phone number and mark it as verified on the User."""
+        from app.utils.exceptions import ValidationError
+        user = User.query.get(user_id)
+        if not user:
+            raise NotFoundError("User not found")
+
+        if not self.verify_otp(phone, code):
+            raise ValidationError("Invalid or expired OTP")
+
+        user.phone = phone
+        user.is_phone_verified = True
+        db.session.commit()
+        logger.info("Phone verified for user %s", user_id)
+        return {"phone": phone, "is_phone_verified": True}
+
+    def toggle_2fa(self, user_id: str, enable: bool, phone: str, code: str) -> dict:
+        """Enable or disable 2FA for a user.
+
+        To enable 2FA, the phone must first be verified with an OTP.
+        """
+        user = User.query.get(user_id)
+        if not user:
+            raise NotFoundError("User not found")
+
+        if enable:
+            if not self.verify_otp(phone, code):
+                raise ValidationError("Invalid or expired OTP")
+            user.phone = phone
+            user.is_phone_verified = True
+            user.two_fa_enabled = True
+        else:
+            user.two_fa_enabled = False
+
+        db.session.commit()
+        return {"two_fa_enabled": user.two_fa_enabled}
+
+    def login_with_2fa(self, user_id: str, code: str) -> dict:
+        """Second step of 2FA login — verify OTP, then issue JWT tokens."""
+        user = User.query.get(user_id)
+        if not user or not user.two_fa_enabled:
+            raise AuthenticationError("2FA not enabled for this account")
+        if not user.phone:
+            raise AuthenticationError("No phone number on file for 2FA")
+
+        if not self.verify_otp(user.phone, code):
+            raise AuthenticationError("Invalid or expired OTP")
+
+        access_token = self._generate_access_token(user.id, user.role)
+        refresh_token = self._generate_refresh_token(user.id)
+        user.last_login = datetime.now(timezone.utc)
+        db.session.commit()
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": self._serialize_user(user),
         }

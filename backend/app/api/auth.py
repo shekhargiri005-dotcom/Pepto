@@ -272,3 +272,93 @@ def update_profile():
         db.session.rollback()
         current_app.logger.exception("Unexpected error in update_profile()")
         return error_response("Failed to update profile.", status_code=500)
+
+
+# ── 2FA Endpoints ──────────────────────────────────────────────────────────────
+
+@auth_bp.route("/send-otp", methods=["POST"])
+@limiter.limit("10 per hour")
+def send_otp():
+    """POST /api/auth/send-otp — Send a Twilio Verify OTP to a phone number.
+
+    Body: {"phone": "+919876543210"}
+    """
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    if not phone:
+        return error_response("phone is required", status_code=400)
+    try:
+        sent = _auth_svc.send_otp(phone)
+        if sent:
+            return success_response({"phone": phone}, "OTP sent successfully")
+        return error_response("Failed to send OTP. Check phone number format (+91XXXXXXXXXX).", status_code=503)
+    except Exception:
+        logger.exception("send_otp error")
+        return error_response("OTP service unavailable", status_code=503)
+
+
+@auth_bp.route("/verify-otp", methods=["POST"])
+@require_auth
+def verify_otp(current_user):
+    """POST /api/auth/verify-otp — Verify OTP and mark phone as verified.
+
+    Body: {"phone": "+919876543210", "code": "123456"}
+    """
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    code = (data.get("code") or "").strip()
+    if not phone or not code:
+        return error_response("phone and code are required", status_code=400)
+    try:
+        result = _auth_svc.verify_phone(str(current_user.id), phone, code)
+        return success_response(result, "Phone verified successfully")
+    except (ValidationError, NotFoundError) as exc:
+        return error_response(str(exc), status_code=422)
+    except Exception:
+        logger.exception("verify_otp error")
+        return error_response("Verification failed", status_code=500)
+
+
+@auth_bp.route("/login-2fa", methods=["POST"])
+@limiter.limit("10 per hour")
+def login_2fa():
+    """POST /api/auth/login-2fa — Step 2 of 2FA login: verify OTP → get tokens.
+
+    Body: {"user_id": "<uuid>", "code": "123456"}
+    """
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get("user_id") or "").strip()
+    code = (data.get("code") or "").strip()
+    if not user_id or not code:
+        return error_response("user_id and code are required", status_code=400)
+    try:
+        result = _auth_svc.login_with_2fa(user_id, code)
+        return success_response(result, "Login successful")
+    except AuthenticationError as exc:
+        return error_response(str(exc), status_code=401)
+    except Exception:
+        logger.exception("login_2fa error")
+        return error_response("Login failed", status_code=500)
+
+
+@auth_bp.route("/toggle-2fa", methods=["POST"])
+@require_auth
+def toggle_2fa(current_user):
+    """POST /api/auth/toggle-2fa — Enable or disable 2FA for the logged-in user.
+
+    Body: {"enable": true, "phone": "+919876543210", "code": "123456"}
+    To disable: {"enable": false, "phone": "", "code": ""}
+    """
+    data = request.get_json(silent=True) or {}
+    enable = data.get("enable", True)
+    phone = (data.get("phone") or "").strip()
+    code = (data.get("code") or "").strip()
+    try:
+        result = _auth_svc.toggle_2fa(str(current_user.id), enable, phone, code)
+        action = "enabled" if enable else "disabled"
+        return success_response(result, f"2FA {action} successfully")
+    except (ValidationError, NotFoundError) as exc:
+        return error_response(str(exc), status_code=422)
+    except Exception:
+        logger.exception("toggle_2fa error")
+        return error_response("Failed to update 2FA settings", status_code=500)
