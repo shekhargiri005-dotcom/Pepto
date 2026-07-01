@@ -48,11 +48,17 @@ class BaseConfig(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRES: int = 3600          # seconds
     JWT_REFRESH_TOKEN_EXPIRES: int = 604800       # 7 days
 
-    # ── Stripe ────────────────────────────────────────────────────────────────
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_PUBLISHABLE_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
-    STRIPE_PLATFORM_FEE_PERCENT: float = 10.0
+    # ── Razorpay ──────────────────────────────────────────────────────────────
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    PLATFORM_FEE_PERCENT: float = 10.0
+
+    # ── Twilio (SMS + 2FA OTP) ────────────────────────────────────────────────
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+    TWILIO_VERIFY_SERVICE_SID: str = ""  # Twilio Verify service for OTP
 
     # ── SendGrid ──────────────────────────────────────────────────────────────
     SENDGRID_API_KEY: str = ""

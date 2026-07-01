@@ -1,19 +1,19 @@
 """
-models/user.py — User model for the Pepto platform.
+models/user.py — User model for the Pepto Pet Food Delivery platform.
 
 Roles:
-    customer  — books services for their pets.
-    provider  — offers pet services.
-    admin     — platform administrator.
+    customer         — browses stores, places orders for pet food.
+    store_owner      — manages a pet food store, products and incoming orders.
+    delivery_partner — picks up and delivers orders to customers.
+    admin            — platform administrator.
 """
 
 from __future__ import annotations
 
 import enum
-import secrets
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import jwt as pyjwt
 from flask import current_app
@@ -25,16 +25,18 @@ from app.extensions import bcrypt, db
 from app.models.base import BaseMixin
 
 if TYPE_CHECKING:
-    from app.models.provider import ProviderProfile
+    from app.models.store import Store
     from app.models.pet import Pet
-    from app.models.booking import Booking
+    from app.models.order import Order
+    from app.models.delivery_partner import DeliveryPartner
 
 
 class UserRole(str, enum.Enum):
     """Enumerated roles for platform users."""
 
     customer = "customer"
-    provider = "provider"
+    store_owner = "store_owner"
+    delivery_partner = "delivery_partner"
     admin = "admin"
 
 
@@ -47,16 +49,18 @@ _role_enum = Enum(
 
 
 class User(BaseMixin, db.Model):
-    """Represents a Pepto platform user (customer, provider, or admin).
+    """Represents a Pepto platform user.
 
     Attributes:
         email: Unique login identifier.
-        phone: Optional phone number.
+        phone: Phone number (required for 2FA OTP).
         password_hash: Bcrypt-hashed password (never expose in API responses).
         full_name: Display name.
         avatar_url: URL to the user's profile picture.
-        role: One of customer / provider / admin.
+        role: One of customer / store_owner / delivery_partner / admin.
         is_verified: True once email verification is complete.
+        is_phone_verified: True once phone OTP verification is complete.
+        two_fa_enabled: True if user has opted into 2FA login.
         is_active: False for suspended accounts.
         last_login: Timestamp of most recent successful login.
     """
@@ -98,6 +102,18 @@ class User(BaseMixin, db.Model):
         default=False,
         server_default="false",
     )
+    is_phone_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    two_fa_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -111,8 +127,16 @@ class User(BaseMixin, db.Model):
 
     # ── Relationships ─────────────────────────────────────────────────────────
 
-    provider_profile: Mapped[Optional["ProviderProfile"]] = relationship(
-        "ProviderProfile",
+    store: Mapped[Optional["Store"]] = relationship(
+        "Store",
+        back_populates="owner",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    delivery_partner_profile: Mapped[Optional["DeliveryPartner"]] = relationship(
+        "DeliveryPartner",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
@@ -127,34 +151,21 @@ class User(BaseMixin, db.Model):
         foreign_keys="Pet.customer_id",
     )
 
-    bookings_as_customer: Mapped[List["Booking"]] = relationship(
-        "Booking",
+    orders: Mapped[List["Order"]] = relationship(
+        "Order",
         back_populates="customer",
         lazy="select",
-        foreign_keys="Booking.customer_id",
+        foreign_keys="Order.customer_id",
     )
 
     # ── Password helpers ──────────────────────────────────────────────────────
 
     def set_password(self, raw_password: str) -> None:
-        """Hash *raw_password* with bcrypt and store it.
-
-        Args:
-            raw_password: The plaintext password supplied by the user.
-        """
-        self.password_hash = bcrypt.generate_password_hash(raw_password).decode(
-            "utf-8"
-        )
+        """Hash *raw_password* with bcrypt and store it."""
+        self.password_hash = bcrypt.generate_password_hash(raw_password).decode("utf-8")
 
     def check_password(self, raw_password: str) -> bool:
-        """Verify *raw_password* against the stored hash.
-
-        Args:
-            raw_password: Candidate plaintext password.
-
-        Returns:
-            True if the password matches, False otherwise.
-        """
+        """Verify *raw_password* against the stored hash."""
         if not self.password_hash:
             return False
         return bcrypt.check_password_hash(self.password_hash, raw_password)
@@ -162,18 +173,14 @@ class User(BaseMixin, db.Model):
     # ── Token helpers ─────────────────────────────────────────────────────────
 
     def generate_verification_token(self) -> str:
-        """Generate a signed JWT for email verification.
-
-        Returns:
-            A compact URL-safe JWT string, valid for 24 hours.
-        """
+        """Generate a signed JWT for email verification (valid 24 h)."""
         import time
 
         payload = {
             "sub": str(self.id),
             "purpose": "email_verification",
             "iat": int(time.time()),
-            "exp": int(time.time()) + 86400,  # 24 h
+            "exp": int(time.time()) + 86400,
         }
         secret = current_app.config.get("JWT_SECRET_KEY", "fallback-secret")
         return pyjwt.encode(payload, secret, algorithm="HS256")
@@ -181,13 +188,8 @@ class User(BaseMixin, db.Model):
     # ── Serialisation ─────────────────────────────────────────────────────────
 
     def to_public_dict(self) -> Dict[str, Any]:
-        """Return a safe public representation (no password_hash).
-
-        Returns:
-            Dict suitable for API responses.
-        """
+        """Return a safe public representation (no password_hash)."""
         data = self.to_dict(exclude=["password_hash"])
-        # Ensure role is the string value, not the enum object
         if isinstance(data.get("role"), UserRole):
             data["role"] = data["role"].value
         return data

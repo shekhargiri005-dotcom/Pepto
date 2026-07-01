@@ -211,56 +211,40 @@ def create_app(config_name: str = "development") -> Flask:
 
 
 def _register_blueprints(app: Flask) -> None:
-    """Import and register all API blueprints under the ``/api`` prefix.
+    """Import and register all API blueprints under the ``/api`` prefix."""
 
-    Each domain (auth, providers, bookings, etc.) lives in its own blueprint
-    module inside ``app/routes/``.  They are imported lazily here to avoid
-    circular imports.
+    blueprints = [
+        ("app.api.auth",      "auth_bp",      "/api/auth"),
+        ("app.api.pets",      "pets_bp",      "/api/pets"),
+        ("app.api.reviews",   "reviews_bp",   "/api/reviews"),
+        ("app.api.stores",    "stores_bp",    "/api/stores"),
+        ("app.api.products",  "products_bp",  "/api/products"),
+        ("app.api.orders",    "orders_bp",    "/api/orders"),
+        ("app.api.cart",      "cart_bp",      "/api/cart"),
+        ("app.api.delivery",  "delivery_bp",  "/api/delivery"),
+        ("app.api.nutrition", "nutrition_bp", "/api/nutrition"),
+        ("app.api.payments",  "payments_bp",  "/api/payments"),
+        ("app.api.admin",     "admin_bp",     "/api/admin"),
+        ("app.api.chatbot",   "chatbot_bp",   "/api/chatbot"),
+    ]
 
-    Args:
-        app: The Flask application instance.
-    """
-    # Auth
+    for module_path, bp_name, url_prefix in blueprints:
+        try:
+            import importlib
+            module = importlib.import_module(module_path)
+            blueprint = getattr(module, bp_name)
+            app.register_blueprint(blueprint, url_prefix=url_prefix)
+            app.logger.info("Registered blueprint: %s at %s", bp_name, url_prefix)
+        except (ImportError, AttributeError) as exc:
+            app.logger.warning(
+                "Blueprint '%s' not found — skipping (%s)", bp_name, exc
+            )
+
+    # WebSocket event handlers
     try:
-        from app.api.auth import auth_bp
-        app.register_blueprint(auth_bp, url_prefix="/api/auth")
+        import app.sockets  # noqa: F401 — registers @socketio.on handlers
     except ImportError:
-        app.logger.warning("auth blueprint not found — skipping registration", exc_info=True)
-
-    # Providers
-    try:
-        from app.api.providers import providers_bp
-        app.register_blueprint(providers_bp, url_prefix="/api/providers")
-    except ImportError:
-        app.logger.warning("providers blueprint not found — skipping registration", exc_info=True)
-
-        # Bookings
-    try:
-        from app.api.bookings import bookings_bp
-        app.register_blueprint(bookings_bp, url_prefix="/api/bookings")
-    except ImportError:
-        app.logger.warning("bookings blueprint not found — skipping registration", exc_info=True)
-
-    # Pets
-    try:
-        from app.api.pets import pets_bp
-        app.register_blueprint(pets_bp, url_prefix="/api/pets")
-    except ImportError:
-        app.logger.warning("pets blueprint not found — skipping registration", exc_info=True)
-
-    # Reviews
-    try:
-        from app.api.reviews import reviews_bp
-        app.register_blueprint(reviews_bp, url_prefix="/api/reviews")
-    except ImportError:
-        app.logger.warning("reviews blueprint not found — skipping registration", exc_info=True)
-
-    # Payments
-    try:
-        from app.api.payments import payments_bp
-        app.register_blueprint(payments_bp, url_prefix="/api/payments")
-    except ImportError:
-        app.logger.warning("payments blueprint not found — skipping registration", exc_info=True)
+        app.logger.warning("sockets module not found — WebSocket events not registered")
 
     # ── Error handlers ─────────────────────────────────────────────────────────────
 

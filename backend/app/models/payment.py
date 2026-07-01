@@ -1,27 +1,13 @@
 """
-models/payment.py — Payment model.
-
-Tracks the Stripe PaymentIntent lifecycle for each Booking.
-Supports full and partial refunds.
+models/payment.py — Payment record for a Pepto order (Razorpay).
 """
 
 from __future__ import annotations
 
-import enum
-import uuid
 from datetime import datetime
-from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import (
-    DateTime,
-    Enum,
-    ForeignKey,
-    Index,
-    JSON,
-    Numeric,
-    String,
-)
+from sqlalchemy import DateTime, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,116 +15,61 @@ from app.extensions import db
 from app.models.base import BaseMixin
 
 if TYPE_CHECKING:
-    from app.models.booking import Booking
-
-
-class PaymentStatus(str, enum.Enum):
-    """States of a Stripe payment lifecycle."""
-
-    pending = "pending"
-    processing = "processing"
-    succeeded = "succeeded"
-    failed = "failed"
-    refunded = "refunded"
-    partially_refunded = "partially_refunded"
-
-
-_payment_status_enum = Enum(
-    PaymentStatus,
-    name="paymentstatus",
-    values_callable=lambda obj: [e.value for e in obj],
-)
+    from app.models.order import Order
 
 
 class Payment(BaseMixin, db.Model):
-    """Records the payment for a single booking.
+    """Razorpay payment record linked to an order.
 
     Attributes:
-        booking_id: FK to the associated Booking (unique: 1 payment per booking).
-        amount: Gross amount charged to the customer.
-        platform_fee: Pepto's fee deducted from the charge.
-        provider_earning: Net amount due to the provider.
-        currency: ISO 4217 currency code (default INR).
-        payment_intent_id: Stripe PaymentIntent ID (pi_...).
-        payment_method_id: Stripe PaymentMethod ID (pm_...).
-        payment_method_type: e.g. 'card', 'upi', 'netbanking'.
-        status: Current payment status.
-        refund_id: Stripe Refund object ID (re_...).
-        refund_amount: Amount actually refunded.
-        refunded_at: Timestamp of the refund.
-        stripe_metadata: Arbitrary JSON blob for extra Stripe metadata.
+        order_id: FK to the Order this payment settles.
+        amount: Total amount charged (INR paise stored, displayed in ₹).
+        currency: Always 'INR' for this platform.
+        razorpay_order_id: Razorpay's order ID (rzp_order_*).
+        razorpay_payment_id: Razorpay's payment ID after capture (pay_*).
+        razorpay_signature: Webhook signature for verification.
+        method: card / upi / netbanking / wallet / cod.
+        status: pending / captured / failed / refunded.
+        platform_fee: Amount retained by Pepto (INR).
+        store_earning: Amount transferred to store (INR).
+        refunded_amount: Amount refunded if applicable (INR).
+        refund_id: Razorpay refund ID if a refund was issued.
+        paid_at: Timestamp of successful capture.
+        refunded_at: Timestamp of refund.
     """
 
     __tablename__ = "payments"
 
-    booking_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("bookings.id", ondelete="CASCADE"),
-        unique=True,
+    order_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        db.ForeignKey("orders.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
-    )
-
-    # ── Financial ─────────────────────────────────────────────────────────────
-
-    amount: Mapped[Decimal] = mapped_column(
-        Numeric(10, 2), nullable=False, default=Decimal("0.00")
-    )
-    platform_fee: Mapped[Decimal] = mapped_column(
-        Numeric(10, 2), nullable=False, default=Decimal("0.00")
-    )
-    provider_earning: Mapped[Decimal] = mapped_column(
-        Numeric(10, 2), nullable=False, default=Decimal("0.00")
-    )
-    currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="INR", server_default="INR"
-    )
-
-    # ── Stripe IDs ────────────────────────────────────────────────────────────
-
-    payment_intent_id: Mapped[Optional[str]] = mapped_column(
-        String(100),
         unique=True,
-        nullable=True,
         index=True,
     )
-    payment_method_id: Mapped[Optional[str]] = mapped_column(
-        String(100), nullable=True
-    )
-    payment_method_type: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
 
-    # ── Status ────────────────────────────────────────────────────────────────
+    # Razorpay IDs
+    razorpay_order_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    razorpay_payment_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    razorpay_signature: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
 
-    status: Mapped[PaymentStatus] = mapped_column(
-        _payment_status_enum,
-        nullable=False,
-        default=PaymentStatus.pending,
-        index=True,
-    )
+    method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
-    # ── Refunds ───────────────────────────────────────────────────────────────
+    # Split
+    platform_fee: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
+    store_earning: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
 
+    # Refund
+    refunded_amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
     refund_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    refund_amount: Mapped[Optional[Decimal]] = mapped_column(
-        Numeric(10, 2), nullable=True
-    )
-    refunded_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
 
-    # ── Extra data ────────────────────────────────────────────────────────────
-
-    stripe_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    # Timestamps
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    refunded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ── Relationships ─────────────────────────────────────────────────────────
 
-    booking: Mapped["Booking"] = relationship(
-        "Booking", back_populates="payment", lazy="select"
-    )
-
-    __table_args__ = (
-        Index("ix_payments_status", "status"),
-        Index("ix_payments_booking_status", "booking_id", "status"),
-    )
+    order: Mapped["Order"] = relationship("Order", back_populates="payment")

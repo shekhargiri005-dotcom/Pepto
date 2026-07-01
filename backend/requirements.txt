@@ -13,7 +13,8 @@ SQLAlchemy==2.0.31
 GeoAlchemy2==0.15.1
 pydantic==2.8.2
 pydantic-settings==2.3.4
-stripe==10.6.0
+razorpay==1.4.2
+twilio==9.2.3
 sendgrid==6.11.0
 pyJWT==2.8.0
 python-dotenv==1.0.1
