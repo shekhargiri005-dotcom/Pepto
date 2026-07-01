@@ -10,14 +10,14 @@ import logging
 from flask import Blueprint, request, current_app
 
 from app.services.auth_service import AuthService
-from app.utils.auth_decorators import require_auth
-from app.utils.response_helpers import success_response, error_response
+from app.utils.decorators import require_auth
+from app.utils.helpers import success_response, error_response
 from app.utils.validators import (
     validate_register_input,
     validate_login_input,
     validate_update_profile_input,
 )
-from app.utils.errors import (
+from app.utils.exceptions import (
     ValidationError,
     AuthenticationError,
     ConflictError,
@@ -114,7 +114,7 @@ def refresh_token():
 def logout():
     """Blacklist the current access token (logout)."""
     try:
-        token = request.current_token
+        token = getattr(request, "current_token", None)
         user = request.current_user
         _auth_svc.logout_user(token, user.id)
         return success_response(message="Logged out successfully.")

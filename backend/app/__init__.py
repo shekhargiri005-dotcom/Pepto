@@ -225,59 +225,44 @@ def _register_blueprints(app: Flask) -> None:
         from app.api.auth import auth_bp
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
     except ImportError:
-        app.logger.warning("auth blueprint not found — skipping registration")
+        app.logger.warning("auth blueprint not found — skipping registration", exc_info=True)
 
     # Providers
     try:
         from app.api.providers import providers_bp
         app.register_blueprint(providers_bp, url_prefix="/api/providers")
     except ImportError:
-        app.logger.warning("providers blueprint not found — skipping registration")
+        app.logger.warning("providers blueprint not found — skipping registration", exc_info=True)
 
-    # Services
-    try:
-        from app.api.services import services_bp
-        app.register_blueprint(services_bp, url_prefix="/api/services")
-    except ImportError:
-        app.logger.warning("services blueprint not found — skipping registration")
-
-    # Bookings
+        # Bookings
     try:
         from app.api.bookings import bookings_bp
         app.register_blueprint(bookings_bp, url_prefix="/api/bookings")
     except ImportError:
-        app.logger.warning("bookings blueprint not found — skipping registration")
+        app.logger.warning("bookings blueprint not found — skipping registration", exc_info=True)
 
     # Pets
     try:
         from app.api.pets import pets_bp
         app.register_blueprint(pets_bp, url_prefix="/api/pets")
     except ImportError:
-        app.logger.warning("pets blueprint not found — skipping registration")
+        app.logger.warning("pets blueprint not found — skipping registration", exc_info=True)
 
     # Reviews
     try:
         from app.api.reviews import reviews_bp
         app.register_blueprint(reviews_bp, url_prefix="/api/reviews")
     except ImportError:
-        app.logger.warning("reviews blueprint not found — skipping registration")
+        app.logger.warning("reviews blueprint not found — skipping registration", exc_info=True)
 
     # Payments
     try:
         from app.api.payments import payments_bp
         app.register_blueprint(payments_bp, url_prefix="/api/payments")
     except ImportError:
-        app.logger.warning("payments blueprint not found — skipping registration")
+        app.logger.warning("payments blueprint not found — skipping registration", exc_info=True)
 
-    # Users / Profile
-    try:
-        from app.api.users import users_bp
-        app.register_blueprint(users_bp, url_prefix="/api/users")
-    except ImportError:
-        app.logger.warning("users blueprint not found — skipping registration")
-
-
-# ── Error handlers ─────────────────────────────────────────────────────────────
+    # ── Error handlers ─────────────────────────────────────────────────────────────
 
 
 def _register_error_handlers(app: Flask) -> None:

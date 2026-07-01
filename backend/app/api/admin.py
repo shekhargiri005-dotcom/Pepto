@@ -20,8 +20,8 @@ from app.models import (
     Service,
     Payment,
 )
-from app.utils.auth import jwt_required
-from app.utils.pagination import paginate_query
+from app.utils.decorators import admin_required
+from app.utils.helpers import paginate_query
 
 # ---------------------------------------------------------------------------
 # Blueprint setup
@@ -29,34 +29,7 @@ from app.utils.pagination import paginate_query
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
 
-# ---------------------------------------------------------------------------
-# Admin-only guard decorator
-# ---------------------------------------------------------------------------
-def admin_required(f):
-    """Decorator: ensures the authenticated user has the 'admin' role."""
 
-    @wraps(f)
-    @jwt_required
-    def decorated_function(*args, **kwargs):
-        if not g.current_user or g.current_user.role != "admin":
-            return (
-                jsonify(
-                    {
-                        "error": "forbidden",
-                        "message": "Administrator privileges required.",
-                    }
-                ),
-                403,
-            )
-        return f(*args, **kwargs)
-
-    return decorated_function
-
-
-# ===========================================================================
-# GET /api/admin/stats
-# Platform-wide statistics dashboard
-# ===========================================================================
 @admin_bp.route("/stats", methods=["GET"])
 @admin_required
 def get_platform_stats():
